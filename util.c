@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -6,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
+#include "platform.h"
 #include "util.h"
 
 extern const char *argv0;
@@ -212,7 +211,6 @@ int
 makedirs(struct string *path, bool parent)
 {
 	int ret;
-	struct stat st;
 	char *s, *end;
 
 	ret = 0;
@@ -221,7 +219,7 @@ makedirs(struct string *path, bool parent)
 		if (*s != '/' && *s)
 			continue;
 		*s = '\0';
-		if (stat(path->s, &st) == 0)
+		if (exists(path->s))
 			break;
 		if (errno != ENOENT) {
 			warn("stat %s:", path->s);
@@ -234,7 +232,7 @@ makedirs(struct string *path, bool parent)
 	while (++s <= end - parent) {
 		if (*s != '\0')
 			continue;
-		if (ret == 0 && mkdir(path->s, 0777) < 0 && errno != EEXIST) {
+		if (ret == 0 && mkdir(path->s) < 0 && errno != EEXIST) {
 			warn("mkdir %s:", path->s);
 			ret = -1;
 		}

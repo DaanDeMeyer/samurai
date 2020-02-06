@@ -1,21 +1,17 @@
-#define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <poll.h>
 #include <signal.h>
-#include <spawn.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/wait.h>
 #include <time.h>
-#include <unistd.h>
 #include "build.h"
 #include "deps.h"
 #include "env.h"
 #include "graph.h"
 #include "log.h"
+#include "platform.h"
 #include "util.h"
 
 struct job {
@@ -32,7 +28,7 @@ struct buildoptions buildopts = {.maxfail = 1};
 static struct edge *work;
 static size_t nstarted, nfinished, ntotal;
 static bool consoleused;
-static struct timespec starttime;
+static int64_t starttime;
 
 void
 buildreset(void) {
@@ -205,7 +201,7 @@ static void
 printstatus(void)
 {
 	const char *fmt;
-	struct timespec endtime;
+	int64_t endtime;
 
 	for (fmt = buildopts.statusfmt; *fmt; ++fmt) {
 		if (*fmt == '%') {
@@ -230,8 +226,8 @@ printstatus(void)
 				printf("%3zu%%", 100 * nfinished / ntotal);
 				break;
 			case 'e':
-				clock_gettime(CLOCK_MONOTONIC, &endtime);
-				printf("%.3f", (endtime.tv_sec - starttime.tv_sec) + 0.000000001 * (endtime.tv_nsec - starttime.tv_nsec));
+				endtime = now();
+				printf("%.3lld", (endtime - starttime));
 				break;
 			case '%':
 				putchar('%');
@@ -250,9 +246,6 @@ jobstart(struct job *j, struct edge *e)
 	size_t i;
 	struct node *n;
 	struct string *rspfile, *content, *description;
-	int fd[2];
-	posix_spawn_file_actions_t actions;
-	char *argv[] = {"/bin/sh", "-c", NULL, NULL};
 
 	++nstarted;
 	for (i = 0; i < e->nout; ++i) {
@@ -269,13 +262,8 @@ jobstart(struct job *j, struct edge *e)
 			goto err0;
 	}
 
-	if (pipe(fd) < 0) {
-		warn("pipe:");
-		goto err1;
-	}
 	j->edge = e;
 	j->cmd = edgevar(e, "command", true);
-	j->fd = fd[0];
 	argv[2] = j->cmd->s;
 
 	if (!consoleused) {
@@ -286,38 +274,7 @@ jobstart(struct job *j, struct edge *e)
 		puts(description->s);
 	}
 
-	if ((errno = posix_spawn_file_actions_init(&actions))) {
-		warn("posix_spawn_file_actions_init:");
-		goto err2;
-	}
-	if ((errno = posix_spawn_file_actions_addclose(&actions, fd[0]))) {
-		warn("posix_spawn_file_actions_addclose:");
-		goto err3;
-	}
-	if (e->pool != &consolepool) {
-		if ((errno = posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0))) {
-			warn("posix_spawn_file_actions_addopen:");
-			goto err3;
-		}
-		if ((errno = posix_spawn_file_actions_adddup2(&actions, fd[1], 1))) {
-			warn("posix_spawn_file_actions_adddup2:");
-			goto err3;
-		}
-		if ((errno = posix_spawn_file_actions_adddup2(&actions, fd[1], 2))) {
-			warn("posix_spawn_file_actions_adddup2:");
-			goto err3;
-		}
-		if ((errno = posix_spawn_file_actions_addclose(&actions, fd[1]))) {
-			warn("posix_spawn_file_actions_addclose:");
-			goto err3;
-		}
-	}
-	if ((errno = posix_spawn(&j->pid, argv[0], &actions, NULL, argv, environ))) {
-		warn("posix_spawn %s:", j->cmd->s);
-		goto err3;
-	}
-	posix_spawn_file_actions_destroy(&actions);
-	close(fd[1]);
+	
 	j->failed = false;
 	if (e->pool == &consolepool)
 		consoleused = true;
@@ -504,7 +461,7 @@ build(void)
 	struct edge *e;
 	const char *fmt;
 
-	clock_gettime(CLOCK_MONOTONIC, &starttime);
+	starttime = now();
 
 	for (fmt = buildopts.statusfmt; *fmt; ++fmt) {
 		if (*fmt == '%') {

@@ -1,10 +1,8 @@
-#define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>  /* for chdir */
 #include "arg.h"
 #include "build.h"
 #include "deps.h"
@@ -12,6 +10,7 @@
 #include "graph.h"
 #include "log.h"
 #include "parse.h"
+#include "platform.h"
 #include "tool.h"
 #include "util.h"
 

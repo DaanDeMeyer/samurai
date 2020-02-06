@@ -1,13 +1,12 @@
-#define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include "arg.h"
 #include "env.h"
 #include "graph.h"
+#include "platform.h"
 #include "tool.h"
 #include "util.h"
 
@@ -153,7 +152,7 @@ printjson(const char *s, size_t n, bool join)
 static int
 compdb(int argc, char *argv[])
 {
-	char dir[PATH_MAX], *p;
+	char dir[4096], *p;
 	struct edge *e;
 	struct string *cmd, *rspfile, *content;
 	bool expandrsp = false, first = true;
